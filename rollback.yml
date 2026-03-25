@@ -1,0 +1,28 @@
+---
+- name: "Rollback services on {{ env }}"
+  hosts: app_servers
+  serial: 0
+  any_errors_fatal: true
+
+  vars:
+    target_services: "{{ lookup('env', 'TARGET_SERVICES') | default('all') }}"
+    rollback_tag: "{{ lookup('env', 'ROLLBACK_TAG') }}"
+
+  tasks:
+    - name: Validate ROLLBACK_TAG
+      fail:
+        msg: "ERROR: ต้องระบุ ROLLBACK_TAG ก่อน rollback"
+      when: rollback_tag == ''
+      run_once: true
+
+    - name: "[ {{ env | upper }} ] Rollback each service"
+      include_role:
+        name: deploy_docker
+      vars:
+        service_name: "{{ item.key }}"
+        svc: "{{ item.value }}"
+        image_tag: "{{ rollback_tag }}"
+      when: target_services == 'all' or item.key in target_services.split(',')
+      loop: "{{ services | dict2items }}"
+      loop_control:
+        label: "{{ item.key }}"

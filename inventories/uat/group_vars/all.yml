@@ -1,0 +1,16 @@
+env: uat
+ecr_registry: "123456789.dkr.ecr.ap-southeast-7.amazonaws.com"
+aws_region: "ap-southeast-7"
+
+services:
+  customer-portal-be:
+    app_port: 8080
+    container_port: 8080
+    env_file: "/opt/customer-portal-be/.env"
+    health_path: "/health"
+
+  customer-portal-fe:
+    app_port: 3000
+    container_port: 3000
+    env_file: "/opt/customer-portal-fe/.env"
+    health_path: "/"

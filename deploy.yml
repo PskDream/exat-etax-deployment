@@ -1,0 +1,21 @@
+---
+- name: "Deploy services to {{ env }}"
+  hosts: app_servers
+  serial: 0
+  any_errors_fatal: true
+
+  vars:
+    target_services: "{{ lookup('env', 'TARGET_SERVICES') | default('all') }}"
+    image_tag: "{{ lookup('env', 'IMAGE_TAG') }}"
+
+  tasks:
+    - name: "[ {{ env | upper }} ] Deploy each service"
+      include_role:
+        name: deploy_docker
+      vars:
+        service_name: "{{ item.key }}"
+        svc: "{{ item.value }}"
+      when: target_services == 'all' or item.key in target_services.split(',')
+      loop: "{{ services | dict2items }}"
+      loop_control:
+        label: "{{ item.key }}"

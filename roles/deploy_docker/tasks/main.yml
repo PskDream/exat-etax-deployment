@@ -1,0 +1,70 @@
+---
+- name: "[{{ service_name }}] Get ECR token"
+  command: >
+    aws ecr get-login-password --region {{ aws_region }}
+  register: ecr_token
+  delegate_to: localhost
+  run_once: true
+  no_log: true
+
+- name: "[{{ service_name }}] Login to ECR"
+  community.docker.docker_login:
+    registry_url: "{{ ecr_registry }}"
+    username: AWS
+    password: "{{ ecr_token.stdout }}"
+    reauthorize: true
+  no_log: true
+
+- name: "[{{ service_name }}] Pull image"
+  community.docker.docker_image:
+    name: "{{ ecr_registry }}/{{ service_name }}"
+    tag: "{{ image_tag }}"
+    source: pull
+    force_source: true
+
+- name: "[{{ service_name }}] Stop old container"
+  community.docker.docker_container:
+    name: "{{ service_name }}"
+    state: stopped
+  ignore_errors: true
+
+- name: "[{{ service_name }}] Remove old container"
+  community.docker.docker_container:
+    name: "{{ service_name }}"
+    state: absent
+  ignore_errors: true
+
+- name: "[{{ service_name }}] Start new container"
+  community.docker.docker_container:
+    name: "{{ service_name }}"
+    image: "{{ ecr_registry }}/{{ service_name }}:{{ image_tag }}"
+    state: started
+    restart_policy: always
+    ports:
+      - "{{ svc.app_port }}:{{ svc.container_port }}"
+    env_file: "{{ svc.env_file }}"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:{{ svc.container_port }}{{ svc.health_path }}"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+- name: "[{{ service_name }}] Wait for healthy"
+  community.docker.docker_container_info:
+    name: "{{ service_name }}"
+  register: container_info
+  until: container_info.container.State.Health.Status == "healthy"
+  retries: 12
+  delay: 5
+  failed_when: container_info.container.State.Health.Status == "unhealthy"
+
+- name: "[{{ service_name }}] Cleanup old images"
+  community.docker.docker_prune:
+    images: true
+    images_filters:
+      dangling: true
+
+- name: "[{{ service_name }}] Done"
+  debug:
+    msg: "✅ {{ inventory_hostname }} — {{ service_name }}:{{ image_tag }}"
