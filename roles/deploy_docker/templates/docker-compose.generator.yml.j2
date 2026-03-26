@@ -1,0 +1,28 @@
+services:
+  e-tax-service:
+    image: 554729428605.dkr.ecr.ap-southeast-7.amazonaws.com/exat/e-tax/generate:${IMAGE_TAG:-latest}
+    ports:
+      - "{{ svc.app_port }}:{{ svc.container_port }}"
+    env_file:
+      - .env
+    environment:
+      SIGNING_JWT_PRIVATE_KEY_PATH: /keys/signing-private-key.pem
+    volumes:
+{% for v in svc.volumes %}
+        - "{{ v }}"
+{% endfor %}
+        - nfs-data:/data
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:{{ svc.container_port }}{{ svc.health_path }}" ]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+volumes:
+  nfs-data:
+    driver: local
+    driver_opts:
+      type: nfs
+      o: addr={{ svc.nfs_server_ip }},rw,sync,nfsvers=4
+      device: ":{{ svc.nfs_device_path }}"

@@ -5,10 +5,10 @@
 ansible/
   ├── inventories/
   │   ├── uat/
-  │   │   ├── hosts.ini            ← IP เครื่อง UAT แยกตาม service group
+  │   │   ├── hosts.ini            ← IP เครื่อง UAT
   │   │   └── group_vars/all.yml   ← config UAT
   │   └── prod/
-  │       ├── hosts.ini            ← IP เครื่อง PROD แยกตาม service group
+  │       ├── hosts.ini            ← IP เครื่อง PROD
   │       └── group_vars/all.yml   ← config PROD
   ├── roles/
   │   ├── deploy_docker/
@@ -36,50 +36,37 @@ ansible-galaxy collection install community.docker
 
 ### Test connection
 ```bash
-ansible app_servers -i inventories/uat -m ping
+ansible all -i inventories/uat -m ping
 ```
 
 ### Dry run
 ```bash
-IMAGE_TAG=abc123 TARGET_SERVICES=customer-portal-be \
+IMAGE_TAG=abc123 TARGET_HOST=uat-server1 TARGET_SERVICE=customer-portal-be \
 ansible-playbook deploy.yml -i inventories/uat --check --diff
-```
-Or
-```bash
-IMAGE_TAG=abc123 TARGET_SERVICES=customer-portal-be \
-ansible-playbook deploy.yml -i inventories/uat --syntax-check 
 ```
 
 ### Deploy Docker service (UAT)
 ```bash
-# deploy เฉพาะ service
-IMAGE_TAG=<git-sha> TARGET_SERVICES=customer-portal-be \
-ansible-playbook deploy.yml -i inventories/uat -v
-
-IMAGE_TAG=latest TARGET_SERVICES=customer-portal-be \
-ansible-playbook deploy.yml -i inventories/uat -v
-
-# deploy หลาย service
-IMAGE_TAG=<git-sha> TARGET_SERVICES=customer-portal-be,rest-pdf \
+IMAGE_TAG=<git-sha> TARGET_HOST=uat-server1 TARGET_SERVICE=customer-portal-be \
 ansible-playbook deploy.yml -i inventories/uat -v
 ```
 
 ### Deploy Docker service (PROD)
 ```bash
-IMAGE_TAG=<git-sha> TARGET_SERVICES=customer-portal-be \
+IMAGE_TAG=<git-sha> TARGET_HOST=prod-server1 TARGET_SERVICE=customer-portal-be \
 ansible-playbook deploy.yml -i inventories/prod -v
 ```
 
 ### Deploy Systemd service (JAR)
 ```bash
 JAR_SRC=/path/to/rest-hsm-0.0.1-SNAPSHOT.jar \
-TARGET_SERVICES=rest-hsm \
+TARGET_HOST=prod-restpdf01 TARGET_SERVICE=rest-hsm \
 ansible-playbook deploy.yml -i inventories/prod -v
 ```
 
 ### Rollback
 ```bash
-ROLLBACK_TAG=<previous-git-sha> TARGET_SERVICES=customer-portal-be \
+ROLLBACK_TAG=<previous-git-sha> TARGET_HOST=prod-server1 TARGET_SERVICE=customer-portal-be \
 ansible-playbook rollback.yml -i inventories/prod -v
 ```
 
@@ -121,17 +108,12 @@ services:
     #   - "/opt/my-service/data:/app/data"
 ```
 
-### 2. เพิ่ม host group ใน hosts.ini
-ชื่อ group ต้องตรงกับ convention `<service_name_with_underscores>_servers`:
+### 2. เพิ่ม host ใน hosts.ini
 ```ini
 [my_service_servers]
-my-server01 ansible_host=10.200.x.x target_services=my-service
+my-server01 ansible_host=10.200.x.x
 [my_service_servers:vars]
 ansible_user=adminos
-
-[service_servers:children]
-...
-my_service_servers
 ```
 
 ### 3. สร้าง template (optional)
@@ -152,27 +134,21 @@ services:
 
 ## โครงสร้าง hosts.ini
 
-แต่ละ service มี group ของตัวเอง ชื่อ group ใช้ convention `<service>_servers` (แทน `-` ด้วย `_`):
 ```ini
 [customer_portal_be_servers]
-prod-server1 ansible_host=10.200.120.17 target_services=customer-portal-be
+prod-server1 ansible_host=10.200.120.17
 [customer_portal_be_servers:vars]
 ansible_user=adminos
 
 [rest_pdf_servers]
-prod-restpdf01 ansible_host=10.200.120.61 target_services=rest-pdf
-prod-restpdf02 ansible_host=10.200.120.62 target_services=rest-pdf
+prod-restpdf01 ansible_host=10.200.120.61
+prod-restpdf02 ansible_host=10.200.120.62
 [rest_pdf_servers:vars]
 ansible_user=adminos
-
-[service_servers:children]
-customer_portal_be_servers
-rest_pdf_servers
-rest_hsm_servers
 ```
 
-`deploy.yml` แปลง `TARGET_SERVICES=customer-portal-be` → target host group `customer_portal_be_servers` โดยอัตโนมัติ
+ระบุ `TARGET_HOST` ตรงกับชื่อ host ใน inventory (เช่น `prod-server1`, `uat-restpdf01`)
 
 ## SSH Authentication
 
-`ansible.cfg` ตั้งค่า `ask_pass = True` ไว้ ทำให้ Ansible prompt ขอ SSH password ทุกครั้ง
+`ansible.cfg` ตั้งค่า `ask_pass = True` และ `become_ask_pass = True` ไว้ ทำให้ Ansible prompt ขอ SSH password และ sudo password ทุกครั้ง

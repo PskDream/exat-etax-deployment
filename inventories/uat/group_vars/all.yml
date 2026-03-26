@@ -3,6 +3,18 @@ ecr_registry: "554729428605.dkr.ecr.ap-southeast-7.amazonaws.com"
 aws_region: "ap-southeast-7"
 
 services:
+  generator:
+    repository: "exat/e-tax/generate"
+    app_port: 9000
+    container_port: 9000
+    env_file:
+      - "/opt/generate/.env"
+    volumes:
+      - "/opt/generate/keys:/keys"
+    health_path: "/health"
+    nfs_server_ip: "10.204.61.36"
+    nfs_device_path: "/Original/ETAX/postbankqas/uat"
+
   customer-portal-be:
     repository: "exat/e-tax/customer-portal-be"
     app_port: 8080

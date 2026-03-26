@@ -3,32 +3,34 @@
   hosts: localhost
   gather_facts: false
   tasks:
-    - name: Validate TARGET_SERVICES
+    - name: Validate TARGET_HOST
       fail:
-        msg: "ERROR: ต้องระบุ TARGET_SERVICES ก่อน deploy"
-      when: lookup('env', 'TARGET_SERVICES') == ''
+        msg: "ERROR: ต้องระบุ TARGET_HOST ก่อน deploy"
+      when: lookup('env', 'TARGET_HOST') == ''
 
-- name: "Deploy services to {{ env | default('') }}"
-  hosts: >-
-    {{ lookup('env', 'TARGET_SERVICES').split(',')
-       | map('replace', '-', '_')
-       | map('regex_replace', '$', '_servers')
-       | join(':') }}
+    - name: Validate TARGET_SERVICE
+      fail:
+        msg: "ERROR: ต้องระบุ TARGET_SERVICE ก่อน deploy"
+      when: lookup('env', 'TARGET_SERVICE') == ''
+
+- name: "Deploy to {{ lookup('env', 'TARGET_HOST') }}"
+  hosts: "{{ lookup('env', 'TARGET_HOST') }}"
   serial: 0
   any_errors_fatal: true
 
   vars:
+    target_service: "{{ lookup('env', 'TARGET_SERVICE') }}"
     image_tag: "{{ lookup('env', 'IMAGE_TAG') }}"
     jar_src: "{{ lookup('env', 'JAR_SRC') }}"
 
   tasks:
-    - name: "[ {{ env | upper }} ] Deploy each service"
+    - name: "[ {{ env | upper }} ] Deploy {{ target_service }}"
       include_role:
         name: "{{ 'deploy_systemd' if item.value.type | default('docker') == 'systemd' else 'deploy_docker' }}"
       vars:
         service_name: "{{ item.key }}"
         svc: "{{ item.value }}"
-      when: item.key in (target_services | default('')).split(',')
+      when: item.key == target_service
       loop: "{{ services | dict2items }}"
       loop_control:
         label: "{{ item.key }}"

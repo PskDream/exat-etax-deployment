@@ -17,57 +17,51 @@ ansible-galaxy collection install community.docker
 
 **Test connectivity:**
 ```bash
-ansible app_servers -i inventories/uat -m ping
+ansible all -i inventories/uat -m ping
 ```
 
 **Dry run (check mode):**
 ```bash
-IMAGE_TAG=abc123 TARGET_SERVICES=customer-portal-be ansible-playbook deploy.yml -i inventories/uat --check --diff
+IMAGE_TAG=abc123 TARGET_HOST=uat-server1 TARGET_SERVICE=customer-portal-be ansible-playbook deploy.yml -i inventories/uat --check --diff
 ```
 
-**Deploy specific service:**
+**Deploy a service:**
 ```bash
-IMAGE_TAG=<git-sha> TARGET_SERVICES=customer-portal-be ansible-playbook deploy.yml -i inventories/uat -v
-```
-
-**Deploy multiple services:**
-```bash
-IMAGE_TAG=<git-sha> TARGET_SERVICES=customer-portal-be,rest-pdf ansible-playbook deploy.yml -i inventories/uat -v
+IMAGE_TAG=<git-sha> TARGET_HOST=uat-server1 TARGET_SERVICE=customer-portal-be ansible-playbook deploy.yml -i inventories/uat -v
 ```
 
 **Rollback:**
 ```bash
-ROLLBACK_TAG=<previous-git-sha> TARGET_SERVICES=customer-portal-be ansible-playbook rollback.yml -i inventories/prod -v
+ROLLBACK_TAG=<previous-git-sha> TARGET_HOST=prod-server1 TARGET_SERVICE=customer-portal-be ansible-playbook rollback.yml -i inventories/prod -v
 ```
 
 ## Repository Structure
 
-- `deploy.yml` — main deployment playbook; requires `IMAGE_TAG` and `TARGET_SERVICES` env vars (comma-separated service names)
-- `rollback.yml` — rollback playbook; requires `ROLLBACK_TAG` and `TARGET_SERVICES` env vars
+- `deploy.yml` — main deployment playbook; requires `IMAGE_TAG`, `TARGET_HOST`, and `TARGET_SERVICE` env vars
+- `rollback.yml` — rollback playbook; requires `ROLLBACK_TAG`, `TARGET_HOST`, and `TARGET_SERVICE` env vars
 - `inventories/uat/` and `inventories/prod/` — environment-specific host inventories and group variables
 - `roles/deploy_docker/tasks/main.yml` — core deployment logic (ECR login → pull image → docker compose v2 → health check)
 - `roles/deploy_systemd/tasks/main.yml` — systemd deployment logic (copy JAR → restart → health check)
-- `ansible.cfg` — global Ansible config (`ask_pass=True`, `host_key_checking=False`)
+- `ansible.cfg` — global Ansible config (`ask_pass=True`, `become_ask_pass=True`, `host_key_checking=False`)
 
-## Host Group Convention
+## Environment Variables
 
-Each service maps to a dedicated host group using the naming convention `<service_name>_servers` (replacing `-` with `_`). `deploy.yml` derives the target host group automatically from `TARGET_SERVICES`:
-
-```
-TARGET_SERVICES=customer-portal-be  →  hosts: customer_portal_be_servers
-TARGET_SERVICES=rest-pdf            →  hosts: rest_pdf_servers
-```
-
-All service groups are children of `service_servers` in `hosts.ini`.
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `TARGET_HOST` | yes | hostname from inventory (e.g. `uat-server1`) |
+| `TARGET_SERVICE` | yes | service name as defined in `group_vars/all.yml` (e.g. `customer-portal-be`) |
+| `IMAGE_TAG` | Docker only | ECR image tag / git SHA |
+| `JAR_SRC` | systemd only | local path to JAR file |
+| `ROLLBACK_TAG` | rollback only | previous image tag to roll back to |
 
 ## Deployment Flow
 
 ### Docker service
-The `deploy_docker` role performs these steps for each service:
+The `deploy_docker` role performs these steps:
 1. Obtain ECR login token and authenticate Docker
 2. Pull image from ECR (`<ecr_registry>/<repository>:<tag>`)
-3. Ensure `/opt/<service_name>/` directory exists
-4. Render `docker-compose.yml` from template
+3. Ensure `/opt/<service_name>/` directory exists (with `become: true`)
+4. Render `docker-compose.yml` from template (with `become: true`)
 5. Deploy via `docker compose up` (docker_compose_v2)
 6. Wait for health check to pass (12 retries × 5s = 60s timeout)
 7. Clean up dangling images
@@ -96,17 +90,13 @@ services:
     health_path: "/health"
 ```
 
-2. Add host group to `hosts.ini` (both UAT and PROD):
+2. Add host to `hosts.ini` (both UAT and PROD):
 
 ```ini
 [my_new_service_servers]
-my-server01 ansible_host=10.200.x.x target_services=my-new-service
+my-server01 ansible_host=10.200.x.x
 [my_new_service_servers:vars]
 ansible_user=adminos
-
-[service_servers:children]
-...
-my_new_service_servers
 ```
 
 3. Optionally create `roles/deploy_docker/templates/docker-compose.my-new-service.yml.j2` (falls back to `docker-compose.yml.j2`)
