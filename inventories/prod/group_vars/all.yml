@@ -1,16 +1,31 @@
 env: prod
-ecr_registry: "123456789.dkr.ecr.ap-southeast-7.amazonaws.com"
+ecr_registry: "554729428605.dkr.ecr.ap-southeast-7.amazonaws.com"
 aws_region: "ap-southeast-7"
 
 services:
   customer-portal-be:
+    repository: "exat/e-tax/customer-portal-be"
     app_port: 8080
     container_port: 8080
-    env_file: "/opt/customer-portal-be/.env"
-    health_path: "/health"
+    env_file:
+      - "/opt/customer-portal-be/.env"
+    health_path: "/api/healthcheck"
 
-  customer-portal-fe:
-    app_port: 3000
-    container_port: 3000
-    env_file: "/opt/customer-portal-fe/.env"
-    health_path: "/"
+  rest-pdf:
+    repository: "exat/e-tax/rest-pdf"
+    app_port: 8000
+    container_port: 8000
+    env_file:
+      - "/opt/rest-pdf/.env"
+    volumes:
+      - "/opt/rest-pdf/resources:/app/resources"
+    health_path: "/actuator/health"
+
+  rest-hsm:
+    type: systemd
+    systemd_service: rest-hsm.service
+    jar_dest: "/home/adminos/rest-hsm/rest-hsm-0.0.1-SNAPSHOT.jar"
+    user: root
+    health_port: 8080
+    health_path: "/actuator/health"
+

@@ -1,0 +1,43 @@
+---
+- name: "[{{ service_name }}] Validate JAR_SRC"
+  fail:
+    msg: "ERROR: ต้องระบุ JAR_SRC ก่อน deploy"
+  when: jar_src == ''
+  run_once: true
+
+- name: "[{{ service_name }}] Copy JAR to server"
+  copy:
+    src: "{{ jar_src }}"
+    dest: "{{ svc.jar_dest }}"
+    owner: "{{ svc.user | default('root') }}"
+    mode: "0755"
+  register: jar_copied
+
+- name: "[{{ service_name }}] Restart service"
+  systemd:
+    name: "{{ svc.systemd_service }}"
+    state: restarted
+    daemon_reload: true
+  when: jar_copied.changed
+
+- name: "[{{ service_name }}] Wait for service active"
+  systemd:
+    name: "{{ svc.systemd_service }}"
+  register: service_status
+  until: service_status.status.ActiveState == "active"
+  retries: 12
+  delay: 5
+  failed_when: service_status.status.ActiveState == "failed"
+
+- name: "[{{ service_name }}] Wait for HTTP health"
+  uri:
+    url: "http://localhost:{{ svc.health_port }}{{ svc.health_path }}"
+    status_code: 200
+  register: health
+  until: health.status == 200
+  retries: 12
+  delay: 5
+
+- name: "[{{ service_name }}] Done"
+  debug:
+    msg: "✅ {{ inventory_hostname }} — {{ service_name }}:{{ image_tag }}"

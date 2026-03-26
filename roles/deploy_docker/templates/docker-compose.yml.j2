@@ -1,0 +1,23 @@
+services:
+  {{ service_name }}:
+    image: "{{ ecr_registry }}/{{ svc.repository }}:{{ image_tag }}"
+    container_name: "{{ service_name }}"
+    restart: always
+    ports:
+      - "{{ svc.app_port }}:{{ svc.container_port }}"
+    env_file:
+{% for f in svc.env_file %}
+      - "{{ f }}"
+{% endfor %}
+{% if svc.volumes is defined %}
+    volumes:
+{% for v in svc.volumes %}
+      - "{{ v }}"
+{% endfor %}
+{% endif %}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:{{ svc.container_port }}{{ svc.health_path }}"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s

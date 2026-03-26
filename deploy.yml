@@ -5,17 +5,21 @@
   any_errors_fatal: true
 
   vars:
-    target_services: "{{ lookup('env', 'TARGET_SERVICES') | default('all') }}"
+    cli_target_services: "{{ lookup('env', 'TARGET_SERVICES') }}"
     image_tag: "{{ lookup('env', 'IMAGE_TAG') }}"
+    jar_src: "{{ lookup('env', 'JAR_SRC') }}"
 
   tasks:
     - name: "[ {{ env | upper }} ] Deploy each service"
       include_role:
-        name: deploy_docker
+        name: "{{ 'deploy_systemd' if item.value.type | default('docker') == 'systemd' else 'deploy_docker' }}"
       vars:
         service_name: "{{ item.key }}"
         svc: "{{ item.value }}"
-      when: target_services == 'all' or item.key in target_services.split(',')
+      when: >-
+        (cli_target_services != '' and (cli_target_services == 'all' or item.key in cli_target_services.split(',')))
+        or
+        (cli_target_services == '' and (target_services | default('all') == 'all' or item.key in (target_services | default('all')).split(',')))
       loop: "{{ services | dict2items }}"
       loop_control:
         label: "{{ item.key }}"

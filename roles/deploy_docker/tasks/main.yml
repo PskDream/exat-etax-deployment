@@ -17,38 +17,28 @@
 
 - name: "[{{ service_name }}] Pull image"
   community.docker.docker_image:
-    name: "{{ ecr_registry }}/{{ service_name }}"
+    name: "{{ ecr_registry }}/{{ svc.repository }}"
     tag: "{{ image_tag }}"
     source: pull
     force_source: true
 
-- name: "[{{ service_name }}] Stop old container"
-  community.docker.docker_container:
-    name: "{{ service_name }}"
-    state: stopped
-  ignore_errors: true
+- name: "[{{ service_name }}] Ensure compose directory exists"
+  file:
+    path: "/opt/{{ service_name }}"
+    state: directory
+    mode: "0755"
 
-- name: "[{{ service_name }}] Remove old container"
-  community.docker.docker_container:
-    name: "{{ service_name }}"
-    state: absent
-  ignore_errors: true
+- name: "[{{ service_name }}] Template docker-compose.yml"
+  template:
+    src: "{{ lookup('first_found', ['docker-compose.' + service_name + '.yml.j2', 'docker-compose.yml.j2']) }}"
+    dest: "/opt/{{ service_name }}/docker-compose.yml"
+    mode: "0644"
 
-- name: "[{{ service_name }}] Start new container"
-  community.docker.docker_container:
-    name: "{{ service_name }}"
-    image: "{{ ecr_registry }}/{{ service_name }}:{{ image_tag }}"
-    state: started
-    restart_policy: always
-    ports:
-      - "{{ svc.app_port }}:{{ svc.container_port }}"
-    env_file: "{{ svc.env_file }}"
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:{{ svc.container_port }}{{ svc.health_path }}"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-      start_period: 15s
+- name: "[{{ service_name }}] Deploy via docker compose"
+  community.docker.docker_compose_v2:
+    project_src: "/opt/{{ service_name }}"
+    state: present
+    pull: never
 
 - name: "[{{ service_name }}] Wait for healthy"
   community.docker.docker_container_info:
