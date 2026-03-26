@@ -10,10 +10,10 @@ services:
     env_file:
       - "/opt/generate/.env"
     volumes:
-      - "/opt/generate/keys:/keys"
+      - "/opt/generator/keys:/keys"
     health_path: "/health"
     nfs_server_ip: "10.204.61.36"
-    nfs_device_path: "/Original/ETAX/postbankqas/uat"
+    nfs_device_path: "/Original/ETAX/postbankqas/postbankqas/uat/"
 
   customer-portal-be:
     repository: "exat/e-tax/customer-portal-be"

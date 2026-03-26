@@ -1,12 +1,12 @@
 services:
-  e-tax-service:
-    image: 554729428605.dkr.ecr.ap-southeast-7.amazonaws.com/exat/e-tax/generate:${IMAGE_TAG:-latest}
+  {{ service_name }}:
+    image: "{{ ecr_registry }}/{{ svc.repository }}:{{ image_tag }}"
+    container_name: "{{ service_name }}"
+    restart: always
     ports:
       - "{{ svc.app_port }}:{{ svc.container_port }}"
     env_file:
       - .env
-    environment:
-      SIGNING_JWT_PRIVATE_KEY_PATH: /keys/signing-private-key.pem
     volumes:
 {% for v in svc.volumes %}
         - "{{ v }}"
