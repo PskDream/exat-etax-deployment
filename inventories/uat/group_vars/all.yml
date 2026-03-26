@@ -1,4 +1,4 @@
-env: prod
+env: uat
 ecr_registry: "554729428605.dkr.ecr.ap-southeast-7.amazonaws.com"
 aws_region: "ap-southeast-7"
 

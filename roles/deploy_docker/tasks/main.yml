@@ -27,12 +27,14 @@
     path: "/opt/{{ service_name }}"
     state: directory
     mode: "0755"
+  become: true
 
 - name: "[{{ service_name }}] Template docker-compose.yml"
   template:
-    src: "{{ lookup('first_found', ['docker-compose.' + service_name + '.yml.j2', 'docker-compose.yml.j2']) }}"
+    src: "{{ lookup('first_found', {'files': ['docker-compose.' + service_name + '.yml.j2', 'docker-compose.yml.j2'], 'paths': [role_path + '/templates']}) }}"
     dest: "/opt/{{ service_name }}/docker-compose.yml"
     mode: "0644"
+  become: true
 
 - name: "[{{ service_name }}] Deploy via docker compose"
   community.docker.docker_compose_v2:

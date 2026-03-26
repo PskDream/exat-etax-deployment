@@ -5,17 +5,18 @@
 ansible/
   ├── inventories/
   │   ├── uat/
-  │   │   ├── hosts.ini            ← IP เครื่อง UAT + target_services ต่อ host
+  │   │   ├── hosts.ini            ← IP เครื่อง UAT แยกตาม service group
   │   │   └── group_vars/all.yml   ← config UAT
   │   └── prod/
-  │       ├── hosts.ini            ← IP เครื่อง PROD + target_services ต่อ host
+  │       ├── hosts.ini            ← IP เครื่อง PROD แยกตาม service group
   │       └── group_vars/all.yml   ← config PROD
   ├── roles/
   │   ├── deploy_docker/
-  │   │   ├── tasks/main.yml       ← logic deploy Docker (ECR → docker compose)
+  │   │   ├── tasks/main.yml       ← logic deploy Docker (ECR → docker compose v2)
   │   │   └── templates/           ← docker-compose.yml.j2 ต่อ service
   │   └── deploy_systemd/
-  │       └── tasks/main.yml       ← logic deploy systemd (copy JAR → restart)
+  │       └── tasks/main.yml       ← logic deploy systemd (copy JAR → restart → health)
+  ├── ansible.cfg                  ← ask_pass=True, host_key_checking=False
   ├── deploy.yml
   └── rollback.yml
 ```
@@ -40,17 +41,22 @@ ansible app_servers -i inventories/uat -m ping
 
 ### Dry run
 ```bash
-IMAGE_TAG=abc123 ansible-playbook deploy.yml -i inventories/uat --check --diff
+IMAGE_TAG=abc123 TARGET_SERVICES=customer-portal-be \
+ansible-playbook deploy.yml -i inventories/uat --check --diff
+```
+Or
+```bash
+IMAGE_TAG=abc123 TARGET_SERVICES=customer-portal-be \
+ansible-playbook deploy.yml -i inventories/uat --syntax-check 
 ```
 
 ### Deploy Docker service (UAT)
 ```bash
-# deploy ทุก service
-IMAGE_TAG=<git-sha> TARGET_SERVICES=all \
-ansible-playbook deploy.yml -i inventories/uat -v
-
 # deploy เฉพาะ service
 IMAGE_TAG=<git-sha> TARGET_SERVICES=customer-portal-be \
+ansible-playbook deploy.yml -i inventories/uat -v
+
+IMAGE_TAG=latest TARGET_SERVICES=customer-portal-be \
 ansible-playbook deploy.yml -i inventories/uat -v
 
 # deploy หลาย service
@@ -60,7 +66,7 @@ ansible-playbook deploy.yml -i inventories/uat -v
 
 ### Deploy Docker service (PROD)
 ```bash
-IMAGE_TAG=<git-sha> TARGET_SERVICES=all \
+IMAGE_TAG=<git-sha> TARGET_SERVICES=customer-portal-be \
 ansible-playbook deploy.yml -i inventories/prod -v
 ```
 
@@ -77,9 +83,30 @@ ROLLBACK_TAG=<previous-git-sha> TARGET_SERVICES=customer-portal-be \
 ansible-playbook rollback.yml -i inventories/prod -v
 ```
 
-## เพิ่ม Service ใหม่
+## Deployment Flow
 
 ### Docker service
+`deploy_docker` role ทำงานตามลำดับนี้สำหรับแต่ละ service:
+1. ดึง ECR login token และ authenticate Docker
+2. Pull image จาก ECR (`<ecr_registry>/<repository>:<tag>`)
+3. สร้าง directory `/opt/<service_name>/` (ถ้ายังไม่มี)
+4. Render `docker-compose.yml` จาก template
+5. Deploy ด้วย `docker compose up` (docker_compose_v2)
+6. รอ health check ผ่าน (12 retries × 5s = 60s timeout)
+7. Cleanup dangling images
+
+### Systemd service (JAR)
+`deploy_systemd` role ทำงานตามลำดับนี้:
+1. Copy JAR ไปยัง `jar_dest` บนเครื่อง target
+2. Restart systemd service (เฉพาะถ้า JAR เปลี่ยน)
+3. รอ service active (12 retries × 5s = 60s timeout)
+4. รอ HTTP health check ผ่านที่ `http://localhost:<health_port><health_path>`
+
+Deployment วิ่งพร้อมกันทุก server (`serial: 0`) และหยุดทันทีถ้า host ใดล้มเหลว (`any_errors_fatal: true`)
+
+## เพิ่ม Service ใหม่
+
+### 1. เพิ่ม service ใน group_vars
 แก้ `group_vars/all.yml` ของแต่ละ environment:
 ```yaml
 services:
@@ -94,7 +121,21 @@ services:
     #   - "/opt/my-service/data:/app/data"
 ```
 
-สร้าง template แยกได้ที่ `roles/deploy_docker/templates/docker-compose.my-service.yml.j2`
+### 2. เพิ่ม host group ใน hosts.ini
+ชื่อ group ต้องตรงกับ convention `<service_name_with_underscores>_servers`:
+```ini
+[my_service_servers]
+my-server01 ansible_host=10.200.x.x target_services=my-service
+[my_service_servers:vars]
+ansible_user=adminos
+
+[service_servers:children]
+...
+my_service_servers
+```
+
+### 3. สร้าง template (optional)
+สร้าง `roles/deploy_docker/templates/docker-compose.my-service.yml.j2`
 ถ้าไม่มีจะใช้ `docker-compose.yml.j2` เป็น default
 
 ### Systemd service (JAR)
@@ -109,10 +150,29 @@ services:
     health_path: "/actuator/health"
 ```
 
-## กำหนด Service ต่อ Host
-ระบุ `target_services` ใน `hosts.ini` ได้ต่อ host:
+## โครงสร้าง hosts.ini
+
+แต่ละ service มี group ของตัวเอง ชื่อ group ใช้ convention `<service>_servers` (แทน `-` ด้วย `_`):
 ```ini
-prod-app01 ansible_host=10.200.120.11 target_services=customer-portal-be
-prod-app02 ansible_host=10.200.120.12 target_services=customer-portal-be,rest-pdf
+[customer_portal_be_servers]
+prod-server1 ansible_host=10.200.120.17 target_services=customer-portal-be
+[customer_portal_be_servers:vars]
+ansible_user=adminos
+
+[rest_pdf_servers]
+prod-restpdf01 ansible_host=10.200.120.61 target_services=rest-pdf
+prod-restpdf02 ansible_host=10.200.120.62 target_services=rest-pdf
+[rest_pdf_servers:vars]
+ansible_user=adminos
+
+[service_servers:children]
+customer_portal_be_servers
+rest_pdf_servers
+rest_hsm_servers
 ```
-ถ้า run พร้อม `TARGET_SERVICES=xxx` จาก CLI จะ override ค่าใน hosts.ini ทุก host
+
+`deploy.yml` แปลง `TARGET_SERVICES=customer-portal-be` → target host group `customer_portal_be_servers` โดยอัตโนมัติ
+
+## SSH Authentication
+
+`ansible.cfg` ตั้งค่า `ask_pass = True` ไว้ ทำให้ Ansible prompt ขอ SSH password ทุกครั้ง

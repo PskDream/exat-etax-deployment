@@ -1,11 +1,23 @@
 ---
-- name: "Deploy services to {{ env }}"
-  hosts: app_servers
+- name: Validate inputs
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Validate TARGET_SERVICES
+      fail:
+        msg: "ERROR: ต้องระบุ TARGET_SERVICES ก่อน deploy"
+      when: lookup('env', 'TARGET_SERVICES') == ''
+
+- name: "Deploy services to {{ env | default('') }}"
+  hosts: >-
+    {{ lookup('env', 'TARGET_SERVICES').split(',')
+       | map('replace', '-', '_')
+       | map('regex_replace', '$', '_servers')
+       | join(':') }}
   serial: 0
   any_errors_fatal: true
 
   vars:
-    cli_target_services: "{{ lookup('env', 'TARGET_SERVICES') }}"
     image_tag: "{{ lookup('env', 'IMAGE_TAG') }}"
     jar_src: "{{ lookup('env', 'JAR_SRC') }}"
 
@@ -16,10 +28,7 @@
       vars:
         service_name: "{{ item.key }}"
         svc: "{{ item.value }}"
-      when: >-
-        (cli_target_services != '' and (cli_target_services == 'all' or item.key in cli_target_services.split(',')))
-        or
-        (cli_target_services == '' and (target_services | default('all') == 'all' or item.key in (target_services | default('all')).split(',')))
+      when: item.key in (target_services | default('')).split(',')
       loop: "{{ services | dict2items }}"
       loop_control:
         label: "{{ item.key }}"
