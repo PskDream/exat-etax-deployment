@@ -3,13 +3,17 @@ ecr_registry: "554729428605.dkr.ecr.ap-southeast-7.amazonaws.com"
 aws_region: "ap-southeast-7"
 
 services:
-  customer-portal-be:
-    repository: "exat/e-tax/customer-portal-be"
-    app_port: 8080
-    container_port: 8080
+  generator:
+    repository: "exat/e-tax/generate"
+    app_port: 9000
+    container_port: 9000
     env_file:
-      - "/opt/customer-portal-be/.env"
-    health_path: "/api/healthcheck"
+      - "/opt/generate/.env"
+    volumes:
+      - "/opt/generator/keys:/keys"
+    health_path: "/health"
+    nfs_server_ip: "10.204.61.26"
+    nfs_device_path: "/exatprd"
 
   rest-pdf:
     repository: "exat/e-tax/rest-pdf"
