@@ -1,0 +1,50 @@
+prometheus.exporter.unix "node" {}
+
+prometheus.scrape "node" {
+  targets    = prometheus.exporter.unix.node.targets
+  forward_to = [prometheus.remote_write.monitoring.receiver]
+}
+
+prometheus.remote_write "monitoring" {
+  endpoint {
+    url = "{{ alloy_prometheus_url }}"
+
+    write_relabel_config {
+      target_label = "environment"
+      replacement  = "{{ env }}"
+    }
+
+    write_relabel_config {
+      target_label = "hostname"
+      replacement  = constants.hostname
+    }
+
+    write_relabel_config {
+      target_label = "nodename"
+      replacement  = "{{ node_group }}"
+    }
+  }
+}
+
+local.file_match "logs" {
+  path_targets = [
+    {__path__ = "/var/log/syslog", job = "syslog"},
+  ]
+}
+
+loki.source.file "logs" {
+  targets    = local.file_match.logs.targets
+  forward_to = [loki.write.monitoring.receiver]
+}
+
+loki.write "monitoring" {
+  endpoint {
+    url = "{{ alloy_loki_url }}"
+  }
+
+  external_labels = {
+    environment = "{{ env }}",
+    hostname    = constants.hostname,
+    nodename    = "{{ node_group }}",
+  }
+}
