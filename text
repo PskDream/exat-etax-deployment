@@ -1,0 +1,7 @@
+IMAGE_TAG=latest TARGET_HOST=app_v2_servers TARGET_SERVICE=generator \
+ansible-playbook deploy.yml -i inventories/uat -v
+
+IMAGE_TAG=latest TARGET_HOST=app_v2_servers TARGET_SERVICE=generator \
+ansible-playbook deploy.yml -i inventories/prod -v
+
+
