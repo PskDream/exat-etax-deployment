@@ -1,0 +1,16 @@
+---
+- name: Validate inputs
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Validate TARGET_HOST
+      fail:
+        msg: "ERROR: ต้องระบุ TARGET_HOST ก่อน install"
+      when: lookup('env', 'TARGET_HOST') == ''
+
+- name: "Install Docker on {{ lookup('env', 'TARGET_HOST') }}"
+  hosts: "{{ lookup('env', 'TARGET_HOST') }}"
+  serial: 0
+  any_errors_fatal: true
+  roles:
+    - install_docker

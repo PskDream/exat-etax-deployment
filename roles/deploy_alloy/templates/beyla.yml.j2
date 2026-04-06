@@ -1,0 +1,18 @@
+discovery:
+  services:
+{% for svc in beyla_services %}
+    - name: {{ svc.name }}
+      open_ports: {{ svc.open_ports }}
+{% endfor %}
+
+otel_metrics_export:
+  endpoint: http://localhost:4318
+
+{% if alloy_tempo_url is defined %}
+otel_traces_export:
+  endpoint: http://localhost:4318
+{% endif %}
+
+attributes:
+  kubernetes:
+    enable: false

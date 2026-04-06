@@ -2,9 +2,6 @@ env: uat
 ecr_registry: "554729428605.dkr.ecr.ap-southeast-7.amazonaws.com"
 aws_region: "ap-southeast-7"
 
-alloy_prometheus_url: "http://10.204.19.244:9090/api/v1/write"
-alloy_loki_url: "http://10.204.19.244:3100/loki/api/v1/push"
-
 services:
   generator:
     repository: "exat/e-tax/generate"

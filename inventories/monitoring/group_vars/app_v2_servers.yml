@@ -1,0 +1,5 @@
+beyla_services:
+  - name: customer-portal-be
+    open_ports: 8080
+  - name: generator
+    open_ports: 9000

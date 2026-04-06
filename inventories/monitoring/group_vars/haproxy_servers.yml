@@ -1,0 +1,1 @@
+haproxy_stats_addr: "unix:///var/run/haproxy/admin.sock"

@@ -1,0 +1,19 @@
+---
+- name: restart alloy
+  ansible.builtin.systemd:
+    name: alloy
+    state: restarted
+  become: true
+
+- name: restart beyla
+  ansible.builtin.systemd:
+    name: beyla
+    state: restarted
+    daemon_reload: true
+  become: true
+
+- name: reload nginx
+  ansible.builtin.systemd:
+    name: nginx
+    state: reloaded
+  become: true

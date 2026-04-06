@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-Ansible-based Docker deployment system for managing multi-environment (UAT/PROD) containerized applications on AWS ECR. Deploys services via SSH to target app servers.
+Ansible-based deployment system for managing multi-environment (UAT/PROD) containerized applications on AWS ECR, and monitoring agents (Grafana Alloy + Beyla) across all servers.
 
 ## Prerequisites
 
@@ -18,6 +18,7 @@ ansible-galaxy collection install community.docker
 **Test connectivity:**
 ```bash
 ansible all -i inventories/uat -m ping
+ansible all -i inventories/monitoring -m ping
 ```
 
 **Dry run (check mode):**
@@ -30,6 +31,11 @@ IMAGE_TAG=abc123 TARGET_HOST=uat-server1 TARGET_SERVICE=customer-portal-be ansib
 IMAGE_TAG=<git-sha> TARGET_HOST=uat-server1 TARGET_SERVICE=customer-portal-be ansible-playbook deploy.yml -i inventories/uat -v
 ```
 
+**Deploy monitoring (Alloy + Beyla):**
+```bash
+TARGET_HOST=app_v2_servers ansible-playbook deploy_alloy.yml -i inventories/monitoring -v
+```
+
 **Rollback:**
 ```bash
 ROLLBACK_TAG=<previous-git-sha> TARGET_HOST=prod-server1 TARGET_SERVICE=customer-portal-be ansible-playbook rollback.yml -i inventories/prod -v
@@ -38,18 +44,22 @@ ROLLBACK_TAG=<previous-git-sha> TARGET_HOST=prod-server1 TARGET_SERVICE=customer
 ## Repository Structure
 
 - `deploy.yml` — main deployment playbook; requires `IMAGE_TAG`, `TARGET_HOST`, and `TARGET_SERVICE` env vars
+- `deploy_alloy.yml` — monitoring deployment playbook; requires `TARGET_HOST` env var
 - `rollback.yml` — rollback playbook; requires `ROLLBACK_TAG`, `TARGET_HOST`, and `TARGET_SERVICE` env vars
-- `inventories/uat/` and `inventories/prod/` — environment-specific host inventories and group variables
+- `inventories/uat/` and `inventories/prod/` — environment-specific host inventories and group variables for app deployments
+- `inventories/monitoring/` — inventory for Alloy/Beyla monitoring deployment across all servers
 - `roles/deploy_docker/tasks/main.yml` — core deployment logic (ECR login → pull image → docker compose v2 → health check)
 - `roles/deploy_systemd/tasks/main.yml` — systemd deployment logic (copy JAR → restart → health check)
+- `roles/deploy_alloy/tasks/main.yml` — monitoring agent deployment; routes to install_docker.yml or install_systemd.yml based on `deploy_type`
+- `roles/deploy_alloy/templates/` — config.alloy.j2, docker-compose.alloy.yml.j2, beyla.yml.j2
 - `ansible.cfg` — global Ansible config (`ask_pass=True`, `become_ask_pass=True`, `host_key_checking=False`)
 
 ## Environment Variables
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `TARGET_HOST` | yes | hostname from inventory (e.g. `uat-server1`) |
-| `TARGET_SERVICE` | yes | service name as defined in `group_vars/all.yml` (e.g. `customer-portal-be`) |
+| `TARGET_HOST` | yes | hostname or group name from inventory (e.g. `uat-server1`, `app_v2_servers`) |
+| `TARGET_SERVICE` | deploy.yml only | service name as defined in `group_vars/all.yml` |
 | `IMAGE_TAG` | Docker only | ECR image tag / git SHA |
 | `JAR_SRC` | systemd only | local path to JAR file |
 | `ROLLBACK_TAG` | rollback only | previous image tag to roll back to |
@@ -73,7 +83,35 @@ The `deploy_systemd` role performs these steps:
 3. Wait for service active state (12 retries × 5s = 60s timeout)
 4. Wait for HTTP health check at `http://localhost:<health_port><health_path>`
 
+### Alloy + Beyla (monitoring)
+The `deploy_alloy` role routes based on `deploy_type` (default: `docker`):
+
+**docker path** (`app_v2_servers`, `rest_pdf_servers`):
+1. Create `/opt/alloy/` owned by adminos
+2. Render `config.alloy`, `docker-compose.yml`, and `beyla.yml` (if `beyla_services` defined)
+3. Pull grafana/alloy and grafana/beyla images
+4. Deploy via docker compose (`recreate: always`)
+5. Wait for `http://localhost:12345/-/ready`
+
+**systemd path** (`nginx_servers`, `haproxy_servers`, `rest_hsm_servers`):
+1. Add Grafana apt repository and install alloy package
+2. Render `config.alloy` to `/etc/alloy/config.alloy`
+3. Enable and start alloy systemd service
+4. Wait for `http://localhost:12345/-/ready`
+
 Deployment is parallel across all servers (`serial: 0`) with `any_errors_fatal: true`.
+
+## Monitoring Inventory Structure
+
+`inventories/monitoring/group_vars/all.yml` — shared URLs:
+- `alloy_prometheus_url` — Prometheus remote write endpoint
+- `alloy_loki_url` — Loki push endpoint
+- `alloy_tempo_url` — Tempo OTLP HTTP endpoint
+
+Per-group variables:
+- `node_group` — label attached to all metrics/logs (set in `hosts.ini` `[group:vars]`)
+- `deploy_type` — `docker` (default) or `systemd`
+- `beyla_services` — list of `{name, open_ports}` to instrument with Beyla (docker groups only)
 
 ## Adding a New Service
 
@@ -100,6 +138,28 @@ ansible_user=adminos
 ```
 
 3. Optionally create `roles/deploy_docker/templates/docker-compose.my-new-service.yml.j2` (falls back to `docker-compose.yml.j2`)
+
+## Adding a New Server to Monitoring
+
+1. Add to `inventories/monitoring/hosts.ini`:
+```ini
+[my_servers]
+my-server01 ansible_host=10.200.x.x
+[my_servers:vars]
+ansible_user=adminos
+node_group=MY-GROUP
+```
+
+2. Create `inventories/monitoring/group_vars/my_servers.yml`:
+```yaml
+# For servers without Docker:
+deploy_type: systemd
+
+# For servers with Docker + Beyla:
+beyla_services:
+  - name: my-service
+    open_ports: 8080
+```
 
 ## Environment Configuration
 

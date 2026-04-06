@@ -1,0 +1,3 @@
+beyla_services:
+  - name: rest-pdf
+    open_ports: 8000

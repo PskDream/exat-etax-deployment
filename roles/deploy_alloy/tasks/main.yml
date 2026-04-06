@@ -1,47 +1,8 @@
 ---
-- name: Ensure /opt/alloy directory exists
-  ansible.builtin.file:
-    path: /opt/alloy
-    state: directory
-    owner: adminos
-    group: adminos
-    mode: "0755"
-  become: true
+- name: Install alloy via Docker
+  ansible.builtin.include_tasks: install_docker.yml
+  when: deploy_type | default('docker') == 'docker'
 
-- name: Render config.alloy
-  ansible.builtin.template:
-    src: config.alloy.j2
-    dest: /opt/alloy/config.alloy
-    mode: "0644"
-  register: alloy_config
-
-- name: Render docker-compose.yml
-  ansible.builtin.template:
-    src: docker-compose.alloy.yml.j2
-    dest: /opt/alloy/docker-compose.yml
-    mode: "0644"
-  register: alloy_compose
-
-- name: Pull latest alloy image
-  community.docker.docker_image:
-    name: grafana/alloy
-    tag: latest
-    source: pull
-    force_source: true
-  become: true
-
-- name: Deploy alloy via docker compose
-  community.docker.docker_compose_v2:
-    project_src: /opt/alloy
-    state: present
-    recreate: "{{ 'always' if (alloy_config.changed or alloy_compose.changed) else 'never' }}"
-  become: true
-
-- name: Wait for alloy to be ready
-  ansible.builtin.uri:
-    url: "http://localhost:12345/-/ready"
-    status_code: 200
-  register: alloy_health
-  retries: 12
-  delay: 5
-  until: alloy_health.status == 200
+- name: Install alloy via systemd
+  ansible.builtin.include_tasks: install_systemd.yml
+  when: deploy_type | default('docker') == 'systemd'

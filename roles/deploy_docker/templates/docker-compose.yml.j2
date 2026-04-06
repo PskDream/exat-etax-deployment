@@ -17,7 +17,7 @@ services:
 {% endif %}
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:{{ svc.container_port }}{{ svc.health_path }}"]
-      interval: 10s
+      interval: 1m
       timeout: 5s
       retries: 3
       start_period: 15s

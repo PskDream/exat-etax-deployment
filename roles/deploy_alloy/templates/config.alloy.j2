@@ -1,9 +1,13 @@
+// ── Node metrics ──────────────────────────────────────────────────────────────
+
 prometheus.exporter.unix "node" {}
 
 prometheus.scrape "node" {
   targets    = prometheus.exporter.unix.node.targets
   forward_to = [prometheus.remote_write.monitoring.receiver]
 }
+
+// ── Remote write ───────────────────────────────────────────────────────────────
 
 prometheus.remote_write "monitoring" {
   endpoint {
@@ -25,6 +29,8 @@ prometheus.remote_write "monitoring" {
     }
   }
 }
+
+// ── Logs ───────────────────────────────────────────────────────────────────────
 
 local.file_match "logs" {
   path_targets = [
@@ -48,3 +54,100 @@ loki.write "monitoring" {
     nodename    = "{{ node_group }}",
   }
 }
+
+{% if nginx_status_url is defined %}
+// ── Nginx metrics ──────────────────────────────────────────────────────────────
+
+prometheus.scrape "nginx" {
+  targets = [{
+    __address__ = "localhost:9113",
+    job         = "nginx",
+    environment = "{{ env }}",
+    hostname    = constants.hostname,
+    nodename    = "{{ node_group }}",
+  }]
+  forward_to = [prometheus.remote_write.monitoring.receiver]
+}
+
+{% endif %}
+{% if haproxy_stats_addr is defined %}
+// ── HAProxy metrics ────────────────────────────────────────────────────────────
+
+prometheus.scrape "haproxy" {
+  targets = [{
+    __address__ = "localhost:9101",
+    job         = "haproxy",
+    environment = "{{ env }}",
+    hostname    = constants.hostname,
+    nodename    = "{{ node_group }}",
+  }]
+  forward_to = [prometheus.remote_write.monitoring.receiver]
+}
+
+{% endif %}
+{% if beyla_services is defined %}
+// ── Beyla OTLP receiver ────────────────────────────────────────────────────────
+
+otelcol.receiver.otlp "beyla" {
+  http { endpoint = "0.0.0.0:4318" }
+  grpc { endpoint = "0.0.0.0:4317" }
+
+  output {
+    metrics = [otelcol.processor.transform.beyla.input]
+{% if alloy_tempo_url is defined %}
+    traces  = [otelcol.processor.transform.beyla.input]
+{% endif %}
+  }
+}
+
+otelcol.processor.transform "beyla" {
+  error_mode = "ignore"
+
+  metric_statements {
+    context    = "resource"
+    statements = [
+      `set(attributes["environment"], "{{ env }}")`,
+      `set(attributes["nodename"], "{{ node_group }}")`,
+    ]
+  }
+
+{% if alloy_tempo_url is defined %}
+  trace_statements {
+    context    = "resource"
+    statements = [
+      `set(attributes["environment"], "{{ env }}")`,
+      `set(attributes["nodename"], "{{ node_group }}")`,
+    ]
+  }
+
+{% endif %}
+  output {
+    metrics = [otelcol.processor.batch.beyla.input]
+{% if alloy_tempo_url is defined %}
+    traces  = [otelcol.processor.batch.beyla.input]
+{% endif %}
+  }
+}
+
+otelcol.processor.batch "beyla" {
+  output {
+    metrics = [otelcol.exporter.prometheus.beyla.input]
+{% if alloy_tempo_url is defined %}
+    traces  = [otelcol.exporter.otlphttp.tempo.input]
+{% endif %}
+  }
+}
+
+otelcol.exporter.prometheus "beyla" {
+  forward_to = [prometheus.remote_write.monitoring.receiver]
+}
+
+{% if alloy_tempo_url is defined %}
+otelcol.exporter.otlphttp "tempo" {
+  client {
+    endpoint = "{{ alloy_tempo_url }}"
+    tls { insecure = true }
+  }
+}
+{% endif %}
+{% endif %}

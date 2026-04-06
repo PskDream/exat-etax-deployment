@@ -6,18 +6,38 @@ ansible/
   ├── inventories/
   │   ├── uat/
   │   │   ├── hosts.ini            ← IP เครื่อง UAT
-  │   │   └── group_vars/all.yml   ← config UAT
-  │   └── prod/
-  │       ├── hosts.ini            ← IP เครื่อง PROD
-  │       └── group_vars/all.yml   ← config PROD
+  │   │   └── group_vars/all.yml   ← config UAT (ECR, services)
+  │   ├── prod/
+  │   │   ├── hosts.ini            ← IP เครื่อง PROD
+  │   │   └── group_vars/all.yml   ← config PROD (ECR, services)
+  │   └── monitoring/
+  │       ├── hosts.ini            ← IP ทุก server + node_group
+  │       └── group_vars/
+  │           ├── all.yml          ← Prometheus/Loki/Tempo URLs
+  │           ├── app_v2_servers.yml
+  │           ├── rest_pdf_servers.yml
+  │           ├── nginx_servers.yml
+  │           ├── haproxy_servers.yml
+  │           └── rest_hsm_servers.yml
   ├── roles/
   │   ├── deploy_docker/
   │   │   ├── tasks/main.yml       ← logic deploy Docker (ECR → docker compose v2)
   │   │   └── templates/           ← docker-compose.yml.j2 ต่อ service
-  │   └── deploy_systemd/
-  │       └── tasks/main.yml       ← logic deploy systemd (copy JAR → restart → health)
+  │   ├── deploy_systemd/
+  │   │   └── tasks/main.yml       ← logic deploy systemd (copy JAR → restart → health)
+  │   └── deploy_alloy/
+  │       ├── tasks/
+  │       │   ├── main.yml         ← เลือก path ตาม deploy_type
+  │       │   ├── install_docker.yml
+  │       │   └── install_systemd.yml
+  │       ├── handlers/main.yml
+  │       └── templates/
+  │           ├── config.alloy.j2
+  │           ├── docker-compose.alloy.yml.j2
+  │           └── beyla.yml.j2
   ├── ansible.cfg                  ← ask_pass=True, host_key_checking=False
   ├── deploy.yml
+  ├── deploy_alloy.yml
   └── rollback.yml
 ```
 
@@ -31,8 +51,12 @@ ansible-galaxy collection install community.docker
 1. แก้ IP เครื่องใน `inventories/uat/hosts.ini` และ `inventories/prod/hosts.ini`
 2. แก้ `ecr_registry` ใน `inventories/*/group_vars/all.yml`
 3. เพิ่ม/แก้ service ใน `services:` ของแต่ละ group_vars
+4. แก้ IP เครื่องใน `inventories/monitoring/hosts.ini`
+5. แก้ URLs ใน `inventories/monitoring/group_vars/all.yml`
 
-## การใช้งาน
+---
+
+## การใช้งาน — App Deployment
 
 ### Test connection
 ```bash
@@ -70,6 +94,44 @@ ROLLBACK_TAG=<previous-git-sha> TARGET_HOST=prod-server1 TARGET_SERVICE=customer
 ansible-playbook rollback.yml -i inventories/prod -v
 ```
 
+---
+
+## การใช้งาน — Monitoring (Alloy + Beyla)
+
+### Deploy Alloy ทุก server ใน group
+```bash
+TARGET_HOST=app_v2_servers ansible-playbook deploy_alloy.yml -i inventories/monitoring -v
+TARGET_HOST=nginx_servers ansible-playbook deploy_alloy.yml -i inventories/monitoring -v
+TARGET_HOST=haproxy_servers ansible-playbook deploy_alloy.yml -i inventories/monitoring -v
+TARGET_HOST=rest_pdf_servers ansible-playbook deploy_alloy.yml -i inventories/monitoring -v
+TARGET_HOST=rest_hsm_servers ansible-playbook deploy_alloy.yml -i inventories/monitoring -v
+```
+
+### deploy_type per group
+
+| Group | deploy_type | Beyla |
+|-------|-------------|-------|
+| app_v2_servers | docker | ✅ instruments app ports |
+| rest_pdf_servers | docker | ✅ instruments app ports |
+| nginx_servers | systemd | — |
+| haproxy_servers | systemd | — |
+| rest_hsm_servers | systemd | — |
+
+- `deploy_type: docker` — ติดตั้ง Alloy + Beyla ผ่าน docker compose ใน `/opt/alloy/`
+- `deploy_type: systemd` — ติดตั้ง Alloy ผ่าน apt package (grafana repo) เป็น systemd service
+
+### เพิ่ม Beyla สำหรับ group ใหม่
+แก้ `inventories/monitoring/group_vars/<group>.yml`:
+```yaml
+beyla_services:
+  - name: my-service
+    open_ports: 8080
+  - name: another-service
+    open_ports: 9000
+```
+
+---
+
 ## Deployment Flow
 
 ### Docker service
@@ -89,7 +151,25 @@ ansible-playbook rollback.yml -i inventories/prod -v
 3. รอ service active (12 retries × 5s = 60s timeout)
 4. รอ HTTP health check ผ่านที่ `http://localhost:<health_port><health_path>`
 
+### Alloy (docker)
+`deploy_alloy` role (docker path):
+1. สร้าง `/opt/alloy/` directory
+2. Render `config.alloy` และ `beyla.yml` (ถ้ามี beyla_services)
+3. Pull grafana/alloy และ grafana/beyla images
+4. Deploy ด้วย docker compose (recreate always)
+5. รอ health check ที่ `http://localhost:12345/-/ready`
+
+### Alloy (systemd)
+`deploy_alloy` role (systemd path):
+1. Add Grafana apt repository
+2. Install alloy package
+3. Render `config.alloy` ไปที่ `/etc/alloy/config.alloy`
+4. Enable และ start alloy systemd service
+5. รอ health check ที่ `http://localhost:12345/-/ready`
+
 Deployment วิ่งพร้อมกันทุก server (`serial: 0`) และหยุดทันทีถ้า host ใดล้มเหลว (`any_errors_fatal: true`)
+
+---
 
 ## เพิ่ม Service ใหม่
 
@@ -132,22 +212,7 @@ services:
     health_path: "/actuator/health"
 ```
 
-## โครงสร้าง hosts.ini
-
-```ini
-[customer_portal_be_servers]
-prod-server1 ansible_host=10.200.120.17
-[customer_portal_be_servers:vars]
-ansible_user=adminos
-
-[rest_pdf_servers]
-prod-restpdf01 ansible_host=10.200.120.61
-prod-restpdf02 ansible_host=10.200.120.62
-[rest_pdf_servers:vars]
-ansible_user=adminos
-```
-
-ระบุ `TARGET_HOST` ตรงกับชื่อ host ใน inventory (เช่น `prod-server1`, `uat-restpdf01`)
+---
 
 ## SSH Authentication
 

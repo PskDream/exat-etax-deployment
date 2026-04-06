@@ -1,0 +1,8 @@
+env: uat
+
+alloy_prometheus_url: "http://10.204.19.244:9090/api/v1/write"
+alloy_loki_url: "http://10.204.19.244:3100/loki/api/v1/push"
+alloy_tempo_url: "http://10.204.19.244:4318"
+
+beyla_version: "3.7.0"
+nginx_exporter_version: "1.5.1"

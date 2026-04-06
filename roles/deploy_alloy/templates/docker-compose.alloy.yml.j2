@@ -11,3 +11,44 @@ services:
       - /sys:/host/sys:ro
     command: run --server.http.listen-addr=0.0.0.0:12345 /etc/alloy/config.alloy
     restart: unless-stopped
+
+{% if haproxy_stats_addr is defined %}
+  haproxy-exporter:
+    image: prom/haproxy-exporter:latest
+    container_name: haproxy-exporter
+    network_mode: host
+    volumes:
+      - /var/run/haproxy:/var/run/haproxy
+    command: --haproxy.scrape-uri="unix:/var/run/haproxy/admin.sock"
+    restart: unless-stopped
+    depends_on:
+      - alloy
+
+{% endif %}
+{% if nginx_status_url is defined %}
+  nginx-prometheus-exporter:
+    image: nginx/nginx-prometheus-exporter:latest
+    container_name: nginx-prometheus-exporter
+    network_mode: host
+    command: --nginx.scrape-uri={{ nginx_status_url }}
+    restart: unless-stopped
+    depends_on:
+      - alloy
+
+{% endif %}
+{% if beyla_services is defined %}
+  beyla:
+    image: grafana/beyla:latest
+    container_name: beyla
+    network_mode: host
+    pid: host
+    privileged: true
+    volumes:
+      - ./beyla.yml:/etc/beyla/beyla.yml
+      - /proc:/host/proc
+    environment:
+      BEYLA_CONFIG_PATH: /etc/beyla/beyla.yml
+    restart: unless-stopped
+    depends_on:
+      - alloy
+{% endif %}

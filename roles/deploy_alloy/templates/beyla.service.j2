@@ -1,0 +1,15 @@
+[Unit]
+Description=Grafana Beyla eBPF auto-instrumentation
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/beyla --config /etc/beyla/beyla.yml
+Restart=on-failure
+RestartSec=5
+
+AmbientCapabilities=CAP_SYS_ADMIN CAP_SYS_PTRACE CAP_NET_ADMIN CAP_PERFMON CAP_BPF
+CapabilityBoundingSet=CAP_SYS_ADMIN CAP_SYS_PTRACE CAP_NET_ADMIN CAP_PERFMON CAP_BPF
+
+[Install]
+WantedBy=multi-user.target
