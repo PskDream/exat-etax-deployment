@@ -48,6 +48,7 @@ services:
       - /proc:/host/proc
     environment:
       BEYLA_CONFIG_PATH: /etc/beyla/beyla.yml
+      BEYLA_PROPAGATORS: tracecontext,baggage
     restart: unless-stopped
     depends_on:
       - alloy

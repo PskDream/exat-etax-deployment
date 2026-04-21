@@ -5,7 +5,9 @@ discovery:
       open_ports: {{ svc.open_ports }}
 {% endfor %}
   exclude:
-    exe_path: dockerd|containerd|docker-proxy
+    - exe_path: dockerd
+    - exe_path: containerd
+    - exe_path: docker-proxy
 
 otel_metrics_export:
   endpoint: http://localhost:4318

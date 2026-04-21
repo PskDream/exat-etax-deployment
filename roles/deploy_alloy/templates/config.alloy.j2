@@ -30,30 +30,6 @@ prometheus.remote_write "monitoring" {
   }
 }
 
-// ── Logs ───────────────────────────────────────────────────────────────────────
-
-local.file_match "logs" {
-  path_targets = [
-    {__path__ = "/var/log/syslog", job = "syslog"},
-  ]
-}
-
-loki.source.file "logs" {
-  targets    = local.file_match.logs.targets
-  forward_to = [loki.write.monitoring.receiver]
-}
-
-loki.write "monitoring" {
-  endpoint {
-    url = "{{ alloy_loki_url }}"
-  }
-
-  external_labels = {
-    environment = "{{ env }}",
-    hostname    = constants.hostname,
-    nodename    = "{{ node_group }}",
-  }
-}
 
 {% if nginx_status_url is defined %}
 // ── Nginx metrics ──────────────────────────────────────────────────────────────
@@ -95,10 +71,19 @@ otelcol.receiver.otlp "beyla" {
   output {
     metrics = [otelcol.processor.transform.beyla.input]
 {% if alloy_tempo_url is defined %}
-    traces  = [otelcol.processor.transform.beyla.input]
+    traces  = [otelcol.processor.transform.beyla.input, otelcol.connector.servicegraph.beyla.input]
 {% endif %}
   }
 }
+
+{% if alloy_tempo_url is defined %}
+otelcol.connector.servicegraph "beyla" {
+  dimensions = ["http.method", "http.route"]
+  output {
+    metrics = [otelcol.processor.transform.beyla.input]
+  }
+}
+{% endif %}
 
 otelcol.processor.transform "beyla" {
   error_mode = "ignore"
@@ -120,16 +105,40 @@ otelcol.processor.transform "beyla" {
     ]
   }
 
+  trace_statements {
+    context    = "span"
+    statements = [
+      `set(name, Concat([name, " ", attributes["http.route"]], "")) where (name == "GET" or name == "POST" or name == "PUT" or name == "DELETE" or name == "PATCH") and attributes["http.route"] != nil`,
+      `set(name, Concat([name, " ", attributes["url.path"]], "")) where (name == "GET" or name == "POST" or name == "PUT" or name == "DELETE" or name == "PATCH") and attributes["http.route"] == nil and attributes["url.path"] != nil`,
+      `set(attributes["peer.service"], attributes["server.address"]) where (name == "GET" or name == "POST" or name == "PUT" or name == "DELETE" or name == "PATCH") and attributes["peer.service"] == nil and attributes["server.address"] != nil`,
+    ]
+  }
+
 {% endif %}
   output {
     metrics = [otelcol.processor.batch.beyla.input]
 {% if alloy_tempo_url is defined %}
-    traces  = [otelcol.processor.batch.beyla.input]
+    traces  = [otelcol.processor.filter.beyla.input]
 {% endif %}
   }
 }
 
+{% if alloy_tempo_url is defined and trace_include_paths is defined %}
+otelcol.processor.filter "beyla" {
+  error_mode = "ignore"
+  traces {
+    span = [
+      `attributes["url.path"] != nil and not ({% for path in trace_include_paths %}IsMatch(attributes["url.path"], "{{ path }}"){% if not loop.last %} or {% endif %}{% endfor %})`,
+    ]
+  }
+  output {
+    traces = [otelcol.processor.batch.beyla.input]
+  }
+}
+{% endif %}
+
 otelcol.processor.batch "beyla" {
+  timeout = "2s"
   output {
     metrics = [otelcol.exporter.prometheus.beyla.input]
 {% if alloy_tempo_url is defined %}

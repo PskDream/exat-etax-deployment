@@ -1,3 +1,7 @@
 beyla_services:
   - name: rest-pdf
     open_ports: 8000
+
+trace_include_paths:
+  - "^/api/"
+  - "^/actuator/health$"

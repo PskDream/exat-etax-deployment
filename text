@@ -1,7 +1,15 @@
-IMAGE_TAG=latest TARGET_HOST=app_v2_servers TARGET_SERVICE=generator \
+IMAGE_TAG=aff7404 TARGET_HOST=app_v2_servers TARGET_SERVICE=generator \
 ansible-playbook deploy.yml -i inventories/uat -v
+
+IMAGE_TAG=aff7404 TARGET_HOST=app_v2_servers TARGET_SERVICE=generator SERIAL=1 \
+ansible-playbook deploy.yml -i inventories/prod -v
 
 IMAGE_TAG=latest TARGET_HOST=app_v2_servers TARGET_SERVICE=generator \
 ansible-playbook deploy.yml -i inventories/prod -v
 
 
+
+IMAGE_TAG=latest TARGET_HOST=app_v2_servers TARGET_SERVICE=customer-portal-be \
+ansible-playbook deploy.yml -i inventories/uat -v
+
+TARGET_HOST=rest_hsm_servers ansible-playbook deploy_alloy.yml -i inventories/monitoring-prod -v

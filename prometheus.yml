@@ -1,0 +1,25 @@
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: "uat"
+    static_configs:
+      - targets:
+          - "10.200.120.141:12345"  # UAT-NGINX-01
+          - "10.200.120.129:12345"  # UAT-ETAX-NG-01
+          - "10.200.120.130:12345"  # UAT-ETAX-NG-02
+          - "10.200.120.131:12345"  # UAT-REST-PDF-01
+          - "10.204.61.40:12345"   # UAT-REST-HSM-01
+          - "10.204.61.51:12345"   # UAT-HA-PROXY-01
+        labels:
+          environment: "uat"
+
+  - job_name: "prod"
+    static_configs:
+      - targets:
+          - "10.200.120.65:12345"  # PROD-ETAX-NG-01
+          - "10.200.120.66:12345"  # PROD-ETAX-NG-02
+          - "10.204.61.65:12345"  # PROD-REST-HSM-01
+          - "10.204.61.66:12345"  # PROD-REST-HSM-02
+        labels:
+          environment: "prod"

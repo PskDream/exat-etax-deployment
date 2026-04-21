@@ -31,9 +31,14 @@ IMAGE_TAG=abc123 TARGET_HOST=uat-server1 TARGET_SERVICE=customer-portal-be ansib
 IMAGE_TAG=<git-sha> TARGET_HOST=uat-server1 TARGET_SERVICE=customer-portal-be ansible-playbook deploy.yml -i inventories/uat -v
 ```
 
-**Deploy monitoring (Alloy + Beyla):**
+**Deploy monitoring (Alloy + Beyla) — UAT:**
 ```bash
 TARGET_HOST=app_v2_servers ansible-playbook deploy_alloy.yml -i inventories/monitoring -v
+```
+
+**Deploy monitoring (Alloy + Beyla) — PROD:**
+```bash
+TARGET_HOST=app_v2_servers ansible-playbook deploy_alloy.yml -i inventories/monitoring-prod -v
 ```
 
 **Rollback:**
@@ -47,7 +52,8 @@ ROLLBACK_TAG=<previous-git-sha> TARGET_HOST=prod-server1 TARGET_SERVICE=customer
 - `deploy_alloy.yml` — monitoring deployment playbook; requires `TARGET_HOST` env var
 - `rollback.yml` — rollback playbook; requires `ROLLBACK_TAG`, `TARGET_HOST`, and `TARGET_SERVICE` env vars
 - `inventories/uat/` and `inventories/prod/` — environment-specific host inventories and group variables for app deployments
-- `inventories/monitoring/` — inventory for Alloy/Beyla monitoring deployment across all servers
+- `inventories/monitoring/` — inventory for Alloy/Beyla monitoring deployment across UAT servers
+- `inventories/monitoring-prod/` — inventory for Alloy/Beyla monitoring deployment across PROD servers
 - `roles/deploy_docker/tasks/main.yml` — core deployment logic (ECR login → pull image → docker compose v2 → health check)
 - `roles/deploy_systemd/tasks/main.yml` — systemd deployment logic (copy JAR → restart → health check)
 - `roles/deploy_alloy/tasks/main.yml` — monitoring agent deployment; routes to install_docker.yml or install_systemd.yml based on `deploy_type`
@@ -103,7 +109,12 @@ Deployment is parallel across all servers (`serial: 0`) with `any_errors_fatal: 
 
 ## Monitoring Inventory Structure
 
-`inventories/monitoring/group_vars/all.yml` — shared URLs:
+Two inventories mirror the same group structure:
+- `inventories/monitoring/` — UAT (`env: uat`)
+- `inventories/monitoring-prod/` — PROD (`env: prod`)
+
+`group_vars/all.yml` — shared URLs per environment:
+- `env` — environment label attached to all metrics/logs/traces (`uat` or `prod`)
 - `alloy_prometheus_url` — Prometheus remote write endpoint
 - `alloy_loki_url` — Loki push endpoint
 - `alloy_tempo_url` — Tempo OTLP HTTP endpoint
@@ -112,6 +123,12 @@ Per-group variables:
 - `node_group` — label attached to all metrics/logs (set in `hosts.ini` `[group:vars]`)
 - `deploy_type` — `docker` (default) or `systemd`
 - `beyla_services` — list of `{name, open_ports}` to instrument with Beyla (docker groups only)
+
+### Beyla resource attributes
+`config.alloy.j2` injects `environment` and `nodename` as OTLP resource attributes on all Beyla metrics and traces via `otelcol.processor.transform "beyla"` before forwarding to Prometheus and Tempo.
+
+### Beyla process exclusions
+`beyla.yml.j2` excludes `dockerd`, `containerd`, and `docker-proxy` from instrumentation via `discovery.exclude.exe_path`. Add additional process names as `|`-separated regex patterns.
 
 ## Adding a New Service
 
@@ -141,7 +158,7 @@ ansible_user=adminos
 
 ## Adding a New Server to Monitoring
 
-1. Add to `inventories/monitoring/hosts.ini`:
+1. Add to `inventories/monitoring/hosts.ini` (UAT) and/or `inventories/monitoring-prod/hosts.ini` (PROD):
 ```ini
 [my_servers]
 my-server01 ansible_host=10.200.x.x
@@ -150,7 +167,7 @@ ansible_user=adminos
 node_group=MY-GROUP
 ```
 
-2. Create `inventories/monitoring/group_vars/my_servers.yml`:
+2. Create `inventories/monitoring/group_vars/my_servers.yml` (and monitoring-prod equivalent):
 ```yaml
 # For servers without Docker:
 deploy_type: systemd

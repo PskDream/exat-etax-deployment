@@ -15,7 +15,7 @@
 
 - name: "Deploy to {{ lookup('env', 'TARGET_HOST') }}"
   hosts: "{{ lookup('env', 'TARGET_HOST') }}"
-  serial: 0
+  serial: "{{ lookup('env', 'SERIAL') | default('0', true) }}"
   any_errors_fatal: true
 
   vars:

@@ -13,12 +13,14 @@
     src: config.alloy.j2
     dest: /opt/alloy/config.alloy
     mode: "0644"
+  become: true
 
 - name: Render beyla.yml
   ansible.builtin.template:
     src: beyla.yml.j2
     dest: /opt/alloy/beyla.yml
     mode: "0644"
+  become: true
   when: beyla_services is defined
 
 - name: Render docker-compose.yml
@@ -26,6 +28,7 @@
     src: docker-compose.alloy.yml.j2
     dest: /opt/alloy/docker-compose.yml
     mode: "0644"
+  become: true
 
 - name: Enable nginx stub_status
   ansible.builtin.copy:

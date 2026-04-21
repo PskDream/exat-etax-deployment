@@ -1,3 +1,7 @@
 beyla_services:
   - name: rest-hsm
     open_ports: 9000
+
+trace_include_paths:
+  - "^/api/"
+  - "^/actuator/health$"

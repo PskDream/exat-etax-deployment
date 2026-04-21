@@ -10,10 +10,19 @@ ansible/
   │   ├── prod/
   │   │   ├── hosts.ini            ← IP เครื่อง PROD
   │   │   └── group_vars/all.yml   ← config PROD (ECR, services)
-  │   └── monitoring/
-  │       ├── hosts.ini            ← IP ทุก server + node_group
+  │   ├── monitoring/
+  │   │   ├── hosts.ini            ← IP UAT servers + node_group
+  │   │   └── group_vars/
+  │   │       ├── all.yml          ← Prometheus/Loki/Tempo URLs (env: uat)
+  │   │       ├── app_v2_servers.yml
+  │   │       ├── rest_pdf_servers.yml
+  │   │       ├── nginx_servers.yml
+  │   │       ├── haproxy_servers.yml
+  │   │       └── rest_hsm_servers.yml
+  │   └── monitoring-prod/
+  │       ├── hosts.ini            ← IP PROD servers + node_group
   │       └── group_vars/
-  │           ├── all.yml          ← Prometheus/Loki/Tempo URLs
+  │           ├── all.yml          ← Prometheus/Loki/Tempo URLs (env: prod)
   │           ├── app_v2_servers.yml
   │           ├── rest_pdf_servers.yml
   │           ├── nginx_servers.yml
@@ -51,8 +60,8 @@ ansible-galaxy collection install community.docker
 1. แก้ IP เครื่องใน `inventories/uat/hosts.ini` และ `inventories/prod/hosts.ini`
 2. แก้ `ecr_registry` ใน `inventories/*/group_vars/all.yml`
 3. เพิ่ม/แก้ service ใน `services:` ของแต่ละ group_vars
-4. แก้ IP เครื่องใน `inventories/monitoring/hosts.ini`
-5. แก้ URLs ใน `inventories/monitoring/group_vars/all.yml`
+4. แก้ IP เครื่องใน `inventories/monitoring/hosts.ini` (UAT) และ `inventories/monitoring-prod/hosts.ini` (PROD)
+5. แก้ URLs ใน `inventories/monitoring/group_vars/all.yml` และ `inventories/monitoring-prod/group_vars/all.yml`
 
 ---
 
@@ -98,13 +107,22 @@ ansible-playbook rollback.yml -i inventories/prod -v
 
 ## การใช้งาน — Monitoring (Alloy + Beyla)
 
-### Deploy Alloy ทุก server ใน group
+### Deploy Alloy ทุก server ใน group (UAT)
 ```bash
 TARGET_HOST=app_v2_servers ansible-playbook deploy_alloy.yml -i inventories/monitoring -v
 TARGET_HOST=nginx_servers ansible-playbook deploy_alloy.yml -i inventories/monitoring -v
 TARGET_HOST=haproxy_servers ansible-playbook deploy_alloy.yml -i inventories/monitoring -v
 TARGET_HOST=rest_pdf_servers ansible-playbook deploy_alloy.yml -i inventories/monitoring -v
 TARGET_HOST=rest_hsm_servers ansible-playbook deploy_alloy.yml -i inventories/monitoring -v
+```
+
+### Deploy Alloy ทุก server ใน group (PROD)
+```bash
+TARGET_HOST=app_v2_servers ansible-playbook deploy_alloy.yml -i inventories/monitoring-prod -v
+TARGET_HOST=nginx_servers ansible-playbook deploy_alloy.yml -i inventories/monitoring-prod -v
+TARGET_HOST=haproxy_servers ansible-playbook deploy_alloy.yml -i inventories/monitoring-prod -v
+TARGET_HOST=rest_pdf_servers ansible-playbook deploy_alloy.yml -i inventories/monitoring-prod -v
+TARGET_HOST=rest_hsm_servers ansible-playbook deploy_alloy.yml -i inventories/monitoring-prod -v
 ```
 
 ### deploy_type per group
