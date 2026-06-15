@@ -33,3 +33,25 @@ services:
     health_port: 8080
     health_path: "/actuator/health"
 
+  customer-portal-be:
+    repository: "exat/e-tax/customer-portal-be"
+    app_port: 8080
+    container_port: 8080
+    env_file:
+      - "/opt/customer-portal-be/.env"
+    health_path: "/api/healthcheck"
+
+  staff-portal:
+    repository: "exat/e-tax/staff-portal"
+    app_port: 8080
+    container_port: 8080
+    env_file:
+      - "/opt/staff-portal/.env"
+
+  staff-portal-be:
+    repository: "exat/e-tax/staff-portal-be"
+    app_port: 8080
+    container_port: 8080
+    env_file:
+      - "/opt/staff-portal-be/.env"
+    health_path: "/api/health"

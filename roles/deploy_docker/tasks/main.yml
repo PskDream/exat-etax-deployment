@@ -50,6 +50,17 @@
   retries: 12
   delay: 5
   failed_when: container_info.container.State.Health.Status == "unhealthy"
+  when: svc.health_path is defined
+
+- name: "[{{ service_name }}] Wait for running (no healthcheck)"
+  community.docker.docker_container_info:
+    name: "{{ service_name }}"
+  register: container_info
+  until: container_info.container.State.Running == true
+  retries: 12
+  delay: 5
+  failed_when: not container_info.container.State.Running
+  when: svc.health_path is not defined
 
 - name: "[{{ service_name }}] Cleanup old images"
   community.docker.docker_prune:

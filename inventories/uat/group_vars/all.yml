@@ -41,3 +41,29 @@ services:
     health_port: 8080
     health_path: "/actuator/health"
 
+  staff-portal:
+    repository: "exat/e-tax/staff-portal"
+    app_port: 8080
+    container_port: 80
+    env_file:
+      - "/opt/staff-portal/.env"
+
+  staff-portal-be:
+    repository: "exat/e-tax/staff-portal-be"
+    app_port: 9000
+    container_port: 9000
+    env_file:
+      - "/opt/staff-portal-be/.env"
+    health_path: "/api/health"
+
+  send-xml-to-h2h:
+    repository: "exat/e-tax/send-xml-to-h2h"
+    app_port: 9000
+    container_port: 9000
+    env_file:
+      - "/opt/send-xml-to-h2h/.env"
+    health_path: "/api/health"
+    volumes:
+      - "nfs-data:/data"
+    nfs_server_ip: "10.204.61.36"
+    nfs_device_path: "/Original/ETAX/postbankqas/postbankqas/uat/"

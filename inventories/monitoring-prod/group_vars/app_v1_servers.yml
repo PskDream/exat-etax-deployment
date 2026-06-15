@@ -1,0 +1,7 @@
+ansible_python_interpreter: /usr/bin/python3.10
+
+deploy_type: systemd
+
+beyla_services:
+  - name: etax-v1
+    open_ports: 5001

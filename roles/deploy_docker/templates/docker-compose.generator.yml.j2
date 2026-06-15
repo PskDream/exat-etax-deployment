@@ -9,6 +9,7 @@ services:
       - .env
     environment:
       TZ: "Asia/Bangkok"
+      JAVA_OPTS: "-Dplay.http.parser.maxMemoryBuffer=512kB"
       OTEL_SERVICE_NAME: "{{ service_name }}"
       # OTEL_EXPORTER_OTLP_ENDPOINT: "http://host.docker.internal:4318"
       # OTEL_PROPAGATORS: "tracecontext,baggage"

@@ -1,0 +1,9 @@
+beyla_services:
+  - name: customer-portal-be
+    open_ports: 8080
+  - name: generator
+    open_ports: 9000
+
+trace_include_paths:
+  - "^/api/v2/"
+  - "^/health$"
